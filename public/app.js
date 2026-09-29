@@ -2,6 +2,10 @@
 const socket = io();
 const app = document.getElementById("app");
 
+socket.on("errorMsg", message => {
+  alert(message || "오류가 발생했습니다.");
+});
+
 let state = null;
 let role = null;
 let myAnswer = null;
@@ -562,6 +566,30 @@ socket.on("host:ok", () => {
 });
 
 /* =========================
+   ROOM STATE
+========================= */
+
+let lastQuestionIndex = null;
+
+socket.on("state", s => {
+  const changedQuestion =
+    lastQuestionIndex !== null &&
+    lastQuestionIndex !== s.current;
+
+  state = s;
+  lastQuestionIndex = s.current;
+
+  if (changedQuestion) {
+    myAnswer = null;
+  }
+
+  if (role === "host") {
+    renderHost();
+  }
+
+  if (role === "player") {
+    renderPlayer();
+/* =========================
    HOST PAGE
 ========================= */
 
@@ -650,3 +678,471 @@ function renderHost() {
           o => `
             <div class="card">
 ```
+              <b>${esc(o.value)}</b>
+              <span>${esc(o.label)}</span>
+            </div>
+          `
+        )
+        .join("")}
+
+    </div>
+
+    <div class="top">
+
+      <button
+        class="primary"
+        onclick="prevQuestion()"
+        ${state.current <= 0 ? "disabled" : ""}
+      >
+        이전 문제
+      </button>
+
+      <button
+        class="primary"
+        onclick="nextQuestion()"
+        ${
+          state.current >= state.questions.length - 1
+            ? "disabled"
+            : ""
+        }
+      >
+        다음 문제
+      </button>
+
+      ${
+        state.locked
+          ? `
+            <button
+              class="green"
+              onclick="unlockQuestion()"
+            >
+              답변 열기
+            </button>
+          `
+          : `
+            <button
+              class="gray"
+              onclick="lockQuestion()"
+            >
+              답변 잠그기
+            </button>
+          `
+      }
+
+      <button
+        class="green"
+        onclick="revealAnswer()"
+        ${state.revealed ? "disabled" : ""}
+      >
+        정답 공개
+      </button>
+
+      <button
+        class="danger"
+        onclick="resetScores()"
+      >
+        점수 초기화
+      </button>
+
+    </div>
+
+    <hr>
+
+    <h3>참가자</h3>
+
+    <div id="players"></div>
+  `;
+
+  renderPlayers();
+}
+
+function renderPlayers() {
+  const el = document.getElementById("players");
+
+  if (!el) return;
+
+  const players =
+    Array.isArray(state?.participants)
+      ? [...state.participants]
+      : [];
+
+  if (!players.length) {
+    el.innerHTML = `
+      <p class="muted">
+        아직 참가자가 없습니다.
+      </p>
+    `;
+    return;
+  }
+
+  players.sort(
+    (a, b) =>
+      (Number(b.score) || 0) -
+      (Number(a.score) || 0)
+  );
+
+  el.innerHTML = players
+    .map(
+      p => `
+        <div class="card">
+          <b>${esc(p.name)}</b>
+
+          <span>
+            ${Number(p.score) || 0}점
+            ${
+              p.answer
+                ? ` · 답변: ${esc(p.answer)}`
+                : ""
+            }
+          </span>
+        </div>
+      `
+    )
+    .join("");
+}
+
+function nextQuestion() {
+  socket.emit("host:next");
+}
+
+function prevQuestion() {
+  socket.emit("host:prev");
+}
+
+function lockQuestion() {
+  socket.emit("host:lock");
+}
+
+function unlockQuestion() {
+  socket.emit("host:unlock");
+}
+
+function revealAnswer() {
+  socket.emit("host:reveal");
+}
+
+function resetScores() {
+  if (
+    confirm(
+      "모든 참가자의 점수를 0점으로 초기화할까요?"
+    )
+  ) {
+    socket.emit("host:resetScores");
+  }
+}
+
+/* =========================
+   PLAYER JOIN
+========================= */
+
+function openJoin() {
+  role = "player";
+  renderJoin();
+}
+
+function renderJoin() {
+  app.innerHTML = `
+    <div class="wrap">
+      <div class="card auth">
+
+        <h1>퀴즈 참가</h1>
+
+        <input
+          id="roomCode"
+          placeholder="방 코드"
+          maxlength="6"
+          style="text-transform:uppercase;"
+        >
+
+        <input
+          id="playerName"
+          placeholder="이름"
+          maxlength="20"
+        >
+
+        <button
+          class="primary"
+          onclick="joinRoom()"
+        >
+          참가하기
+        </button>
+
+      </div>
+    </div>
+  `;
+}
+
+function joinRoom() {
+  const code =
+    document.getElementById("roomCode")?.value
+      .trim()
+      .toUpperCase();
+
+  const name =
+    document.getElementById("playerName")?.value
+      .trim();
+
+  if (!code) {
+    return alert("방 코드를 입력해주세요.");
+  }
+
+  if (!name) {
+    return alert("이름을 입력해주세요.");
+  }
+
+  myName = name;
+
+  socket.emit("join", {
+    code,
+    name
+  });
+}
+
+socket.on("joined", ({ code, name }) => {
+  role = "player";
+  myName = name || myName;
+  loadedRoomCode = code;
+  myAnswer = null;
+
+  app.innerHTML = `
+    <div class="wrap">
+      <div class="card">
+        <p class="muted">
+          방에 참가했습니다. 퀴즈가 시작되면 문제가 표시됩니다.
+        </p>
+      </div>
+    </div>
+  `;
+});
+
+function renderPlayer() {
+  if (!state) return;
+
+  const q =
+    state.questions[state.current];
+
+  if (!q) {
+    app.innerHTML = `
+      <div class="wrap">
+        <div class="card">
+          <h1>퀴즈 준비 중</h1>
+          <p class="muted">
+            진행자가 문제를 준비하고 있습니다.
+          </p>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  const me =
+    Array.isArray(state.participants)
+      ? state.participants.find(
+          p => p.id === socket.id
+        )
+      : null;
+
+  const score =
+    Number(me?.score) || 0;
+
+  const serverAnswer =
+    me?.answer || null;
+
+  if (serverAnswer) {
+    myAnswer = serverAnswer;
+  }
+
+  app.innerHTML = `
+    <div class="wrap">
+
+      <div class="card">
+
+        <div class="top">
+
+          <div>
+            <h1>우리들의 퀴즈쇼</h1>
+
+            <span class="badge">
+              ${esc(myName)}
+            </span>
+          </div>
+
+          <span class="badge">
+            ${score}점
+          </span>
+
+        </div>
+
+        <h2>
+          Q${state.current + 1}.
+          ${esc(q.question)}
+        </h2>
+
+        ${
+          state.revealed
+            ? `
+              <div class="card">
+                <b>정답</b>
+
+                <p>
+                  ${esc(q.answer)}
+                </p>
+
+                ${
+                  myAnswer === q.answer
+                    ? `
+                      <p>
+                        정답입니다!
+                        +${Number(q.points) || 0}점
+                      </p>
+                    `
+                    : myAnswer
+                      ? `
+                        <p>
+                          오답입니다.
+                        </p>
+                      `
+                      : ""
+                }
+              </div>
+            `
+            : state.locked
+              ? `
+                <p class="muted">
+                  답변이 잠겼습니다.
+                </p>
+
+                ${
+                  myAnswer
+                    ? `
+                      <p>
+                        제출한 답:
+                        <b>${esc(myAnswer)}</b>
+                      </p>
+                    `
+                    : ""
+                }
+              `
+              : `
+                <div class="options">
+
+                  ${q.options
+                    .map(
+                      o => `
+                        <button
+                          class="option"
+                          onclick="answerQuestion('${esc(o.value)}')"
+                          ${
+                            myAnswer
+                              ? "disabled"
+                              : ""
+                          }
+                        >
+                          <b>${esc(o.value)}</b>
+                          ${esc(o.label)}
+                        </button>
+                      `
+                    )
+                    .join("")}
+
+                </div>
+
+                ${
+                  myAnswer
+                    ? `
+                      <p class="muted">
+                        제출한 답:
+                        <b>${esc(myAnswer)}</b>
+                      </p>
+                    `
+                    : ""
+                }
+              `
+        }
+
+      </div>
+
+    </div>
+  `;
+}
+
+function answerQuestion(answer) {
+  if (myAnswer) return;
+
+  if (state?.locked || state?.revealed) {
+    return;
+  }
+
+  const q =
+    state?.questions?.[state.current];
+
+  if (!q) return;
+
+  if (
+    !q.options.some(
+      o => o.value === answer
+    )
+  ) {
+    return;
+  }
+
+  myAnswer = answer;
+
+  socket.emit("answer", answer);
+
+  renderPlayer();
+}
+
+/* =========================
+   BOOT
+========================= */
+
+function boot() {
+  const path =
+    window.location.pathname;
+
+  if (path === "/host") {
+    hostLogin();
+    return;
+  }
+
+  if (path === "/join") {
+    openJoin();
+    return;
+  }
+
+  app.innerHTML = `
+    <div class="wrap">
+      <div class="card auth">
+
+        <h1>우리들의 퀴즈쇼</h1>
+
+        <p class="muted">
+          진행자는 /host,
+          참가자는 /join으로 접속하세요.
+        </p>
+
+        <div class="top">
+
+          <button
+            class="primary"
+            onclick="location.href='/host'"
+          >
+            진행자
+          </button>
+
+          <button
+            class="green"
+            onclick="location.href='/join'"
+          >
+            참가자
+          </button>
+
+        </div>
+
+      </div>
+    </div>
+  `;
+}
+
+boot();
