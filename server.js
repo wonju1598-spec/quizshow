@@ -1188,24 +1188,21 @@ const PORT =
 initDb()
   .then(() => loadRooms())
   .then(() => {
-
     server.listen(
       PORT,
+      "0.0.0.0",
       () => {
         console.log(
-          "QuizShow running on " +
+          "QuizShow running on 0.0.0.0:" +
           PORT
         );
       }
     );
-
   })
   .catch(e => {
-
     console.error(
       "DB 초기화 실패",
       e
     );
-
     process.exit(1);
   });
