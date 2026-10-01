@@ -356,7 +356,7 @@ function renderEditor() {
                 value="${esc(o.value)}"
                 ${q.answer === o.value ? "selected" : ""}
               >
-                ${esc(o.value)} · ${esc(o.label)}
+                ${q.type==="ox" ? esc(o.label) : `${esc(o.value)} · ${esc(o.label)}`}
               </option>
             `
           )
