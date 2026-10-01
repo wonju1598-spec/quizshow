@@ -7,6 +7,7 @@ let myAnswer = null;
 let myName = "";
 let hostQuestions = [];
 let hostTitle = "우리들의 퀴즈쇼";
+let loadedRoomCode = "";
 
 const sample = [
   {
@@ -42,16 +43,18 @@ function esc(s) {
       "&": "&amp;",
       "<": "&lt;",
       ">": "&gt;",
-      '"': "&quot;",
+      "\"": "&quot;",
       "'": "&#39;"
     }[m])
   );
 }
 
 function labels(type) {
-  if (type === "ox") return ["O", "X"];
-  if (type === "ab") return ["A", "B"];
-  return ["1", "2", "3", "4"];
+  return type === "ox"
+    ? ["O", "X"]
+    : type === "ab"
+      ? ["A", "B"]
+      : ["1", "2", "3", "4"];
 }
 
 function makeOptions(type) {
@@ -62,7 +65,15 @@ function makeOptions(type) {
 }
 
 /* =========================
-   진행자 로그인
+   COMMON SOCKET ERRORS
+========================= */
+
+socket.on("errorMsg", message => {
+  alert(message || "오류가 발생했습니다.");
+});
+
+/* =========================
+   HOST LOGIN
 ========================= */
 
 function hostLogin() {
@@ -83,7 +94,10 @@ socket.on("host:status", ({ configured }) => {
             placeholder="진행자 비밀번호"
           >
 
-          <button class="primary" onclick="loginHost()">
+          <button
+            class="primary"
+            onclick="loginHost()"
+          >
             로그인
           </button>
         </div>
@@ -111,7 +125,10 @@ socket.on("host:status", ({ configured }) => {
             placeholder="비밀번호 다시 입력"
           >
 
-          <button class="primary" onclick="setupHost()">
+          <button
+            class="primary"
+            onclick="setupHost()"
+          >
             비밀번호 설정
           </button>
         </div>
@@ -121,13 +138,13 @@ socket.on("host:status", ({ configured }) => {
 });
 
 function loginHost() {
-  const pw = document.getElementById("pw").value;
+  const pw = document.getElementById("pw")?.value || "";
   socket.emit("host:login", pw);
 }
 
 function setupHost() {
-  const a = document.getElementById("pw").value;
-  const b = document.getElementById("pw2").value;
+  const a = document.getElementById("pw")?.value || "";
+  const b = document.getElementById("pw2")?.value || "";
 
   if (a !== b) {
     return alert("비밀번호가 서로 다릅니다.");
@@ -152,17 +169,19 @@ socket.on("host:passwordSet", r => {
   openHostEditor();
 });
 
-/* =========================
-   퀴즈 불러오기
-========================= */
-
 function openHostEditor() {
   role = "host";
   socket.emit("host:getQuiz");
 }
 
+/* =========================
+   HOST QUIZ EDITOR
+========================= */
+
 socket.on("host:quiz", quiz => {
-  hostTitle = quiz.title || "우리들의 퀴즈쇼";
+  hostTitle =
+    quiz.title ||
+    "우리들의 퀴즈쇼";
 
   hostQuestions =
     quiz.questions?.length
@@ -177,12 +196,12 @@ socket.on("host:saved", () => {
 
   if (b) {
     b.textContent = "저장됨 ✓";
+
+    setTimeout(() => {
+      if (b) b.textContent = "DB에 자동 저장";
+    }, 1200);
   }
 });
-
-/* =========================
-   진행자 설정 / 문제 편집
-========================= */
 
 function hostSetup() {
   app.innerHTML = `
@@ -195,7 +214,10 @@ function hostSetup() {
             <span class="badge">/host</span>
           </div>
 
-          <span id="saveState" class="muted">
+          <span
+            id="saveState"
+            class="muted"
+          >
             DB에 자동 저장
           </span>
         </div>
@@ -210,13 +232,21 @@ function hostSetup() {
         <div id="editor"></div>
 
         <div class="top">
-          <button class="primary" onclick="addQ()">
+
+          <button
+            class="primary"
+            onclick="addQ()"
+          >
             문제 추가
           </button>
 
-          <button class="green" onclick="createRoom()">
+          <button
+            class="green"
+            onclick="createRoom()"
+          >
             새 방 만들기
           </button>
+
         </div>
 
         <hr>
@@ -224,24 +254,26 @@ function hostSetup() {
         <h2>기존 방 불러오기</h2>
 
         <p class="muted">
-          이미 만들어진 방의 코드를 입력하면
-          해당 방의 진행자로 다시 들어갑니다.
+          Render가 재시작되어도 저장된 방의 코드를 입력하면
+          기존 방을 다시 불러올 수 있습니다.
         </p>
 
         <div class="top">
+
           <input
-            id="loadCode"
-            placeholder="방 코드"
+            id="loadRoomCode"
+            placeholder="기존 방 코드"
             maxlength="6"
-            style="text-transform:uppercase"
+            style="text-transform:uppercase;"
           >
 
           <button
-            class="primary"
-            onclick="loadRoom()"
+            class="gray"
+            onclick="loadExistingRoom()"
           >
             기존 방 불러오기
           </button>
+
         </div>
 
       </div>
@@ -250,10 +282,6 @@ function hostSetup() {
 
   renderEditor();
 }
-
-/* =========================
-   문제 편집기
-========================= */
 
 function renderEditor() {
   const ed = document.getElementById("editor");
@@ -289,12 +317,11 @@ function renderEditor() {
           <label>유형</label>
 
           <select data-k="type">
-
             <option
               value="single"
               ${q.type === "single" ? "selected" : ""}
             >
-              1, 2, 3, 4
+              1,2,3,4
             </option>
 
             <option
@@ -310,7 +337,6 @@ function renderEditor() {
             >
               A / B
             </option>
-
           </select>
         </div>
 
@@ -356,7 +382,7 @@ function renderEditor() {
                 value="${esc(o.value)}"
                 ${q.answer === o.value ? "selected" : ""}
               >
-                ${q.type==="ox" ? esc(o.label) : `${esc(o.value)} · ${esc(o.label)}`}
+                ${esc(o.value)} · ${esc(o.label)}
               </option>
             `
           )
@@ -365,29 +391,43 @@ function renderEditor() {
       </select>
     `;
 
-    const typeSelect = d.querySelector('[data-k="type"]');
+    const typeSelect =
+      d.querySelector('[data-k="type"]');
 
-    typeSelect.onchange = () => {
-      q.type = typeSelect.value;
-      q.options = makeOptions(q.type);
-      q.answer = q.options[0].value;
+    if (typeSelect) {
+      typeSelect.onchange = () => {
+        q.type = typeSelect.value;
+        q.options = makeOptions(q.type);
+        q.answer = q.options[0].value;
 
-      renderEditor();
-      saveQuiz();
-    };
-
-    d
-      .querySelectorAll('[data-k]:not([data-k="type"])')
-      .forEach(x => {
-        x.onchange = () => updateQ(q, d);
-      });
-
-    d.querySelectorAll("[data-opt]").forEach(x => {
-      x.oninput = () => {
-        q.options[Number(x.dataset.opt)].label = x.value;
+        renderEditor();
         saveQuiz();
       };
-    });
+    }
+
+    d
+      .querySelectorAll(
+        "[data-k]:not([data-k=type])"
+      )
+      .forEach(x => {
+        x.onchange = () => {
+          updateQ(q, d);
+        };
+      });
+
+    d
+      .querySelectorAll("[data-opt]")
+      .forEach(x => {
+        x.oninput = () => {
+          const index =
+            Number(x.dataset.opt);
+
+          if (q.options[index]) {
+            q.options[index].label = x.value;
+            saveQuiz();
+          }
+        };
+      });
 
     ed.appendChild(d);
   });
@@ -395,48 +435,41 @@ function renderEditor() {
 
 function updateQ(q, d) {
   q.question =
-    d.querySelector('[data-k="question"]').value;
+    d.querySelector(
+      '[data-k="question"]'
+    ).value;
 
   q.points =
     Number(
-      d.querySelector('[data-k="points"]').value
+      d.querySelector(
+        '[data-k="points"]'
+      ).value
     ) || 0;
 
   q.answer =
-    d.querySelector('[data-k="answer"]').value;
+    d.querySelector(
+      '[data-k="answer"]'
+    ).value;
 
   saveQuiz();
 }
-
-/* =========================
-   퀴즈 저장
-========================= */
 
 function saveQuiz() {
   hostTitle =
     document.getElementById("title")?.value ||
     hostTitle;
 
-  socket.emit("host:saveQuiz", {
-    title: hostTitle,
-    questions: hostQuestions
-  });
-
-  /*
-    현재 이미 방에 들어와 있는 상태라면
-    수정한 문제를 현재 방에도 바로 반영
-  */
-  if (state?.code) {
-    socket.emit(
-      "host:updateQuestions",
-      hostQuestions
-    );
-  }
+  socket.emit(
+    "host:saveQuiz",
+    {
+      title: hostTitle,
+      questions: hostQuestions
+    }
+  );
 }
 
 function delQ(i) {
   hostQuestions.splice(i, 1);
-
   renderEditor();
   saveQuiz();
 }
@@ -456,59 +489,93 @@ function addQ() {
 }
 
 /* =========================
-   새 방 만들기
+   CREATE ROOM
 ========================= */
 
 function createRoom() {
-  hostTitle =
-    document.getElementById("title")?.value ||
-    hostTitle;
-
   saveQuiz();
 
-  socket.emit("host:create", {
-    title: hostTitle,
-    questions: hostQuestions
-  });
+  socket.emit(
+    "host:create",
+    {
+      title: hostTitle,
+      questions: hostQuestions
+    }
+  );
 }
 
 socket.on("host:created", ({ code }) => {
+  loadedRoomCode = code;
+  role = "host";
   hostPage(code);
 });
 
 /* =========================
-   기존 방 불러오기
+   LOAD EXISTING ROOM
 ========================= */
 
-function loadRoom() {
-  const input = document.getElementById("loadCode");
+function loadExistingRoom() {
+  const input =
+    document.getElementById(
+      "loadRoomCode"
+    );
 
   if (!input) return;
 
-  const code = input.value.trim().toUpperCase();
+  const code =
+    input.value
+      .trim()
+      .toUpperCase();
 
   if (!code) {
     return alert("방 코드를 입력해주세요.");
   }
 
-  socket.emit("host:load", {
-    code
-  });
+  loadedRoomCode = code;
+
+  socket.emit(
+    "host:load",
+    {
+      code
+    }
+  );
 }
 
-/*
-  서버가 host:ok를 먼저 보내고
-  state를 그 다음에 보내기 때문에
-  여기서 바로 hostPage()를 실행하지 않는다.
-
-  실제 방 정보는 state 이벤트에서 받은 뒤 화면을 만든다.
-*/
 socket.on("host:ok", () => {
-  role = "host";
+  if (loadedRoomCode) {
+    hostPage(loadedRoomCode);
+  }
 });
 
 /* =========================
-   진행자 화면
+   ROOM STATE
+========================= */
+
+let lastQuestionIndex = null;
+
+socket.on("state", s => {
+  const changedQuestion =
+    lastQuestionIndex !== null &&
+    lastQuestionIndex !== s.current;
+
+  state = s;
+  lastQuestionIndex = s.current;
+
+  if (changedQuestion) {
+    myAnswer = null;
+  }
+
+  if (role === "host") {
+    renderHost();
+  }
+
+  if (role === "player") {
+    renderPlayer();
+  }
+});
+
+/* =========================
+   HOST PAGE
 ========================= */
 
 function hostPage(code) {
@@ -516,6 +583,7 @@ function hostPage(code) {
 
   app.innerHTML = `
     <div class="wrap">
+
       <div class="card">
 
         <div class="top">
@@ -541,6 +609,7 @@ function hostPage(code) {
         <div id="hostMain"></div>
 
       </div>
+
     </div>
   `;
 
@@ -548,17 +617,31 @@ function hostPage(code) {
 }
 
 function renderHost() {
-  if (!state) return;
-
-  const q =
-    state.questions[state.current];
-
-  if (!q) return;
-
   const main =
     document.getElementById("hostMain");
 
   if (!main) return;
+
+  if (!state) {
+    main.innerHTML = `
+      <p class="muted">
+        방 정보를 불러오는 중입니다...
+      </p>
+    `;
+    return;
+  }
+
+  const q =
+    state.questions[state.current];
+
+  if (!q) {
+    main.innerHTML = `
+      <p class="muted">
+        등록된 문제가 없습니다.
+      </p>
+    `;
+    return;
+  }
 
   main.innerHTML = `
     <h2>
@@ -568,15 +651,14 @@ function renderHost() {
 
     <p>
       문제 점수:
-      <b>${q.points}</b>점
-
+      <b>${Number(q.points) || 0}</b>점
       · 상태:
       ${
         state.revealed
           ? "정답 공개됨"
           : state.locked
-          ? "잠금"
-          : "답변 가능"
+            ? "잠금"
+            : "답변 가능"
       }
     </p>
 
@@ -587,15 +669,7 @@ function renderHost() {
           o => `
             <div class="card">
               <b>${esc(o.value)}</b>
-              ·
-              ${esc(o.label)}
-
-              ${
-                state.revealed &&
-                o.value === q.answer
-                  ? " ← 정답"
-                  : ""
-              }
+              <span>${esc(o.label)}</span>
             </div>
           `
         )
@@ -606,107 +680,137 @@ function renderHost() {
     <div class="top">
 
       <button
-        class="gray"
-        onclick="prevQ()"
+        class="primary"
+        onclick="prevQuestion()"
+        ${state.current <= 0 ? "disabled" : ""}
       >
-        이전
+        이전 문제
       </button>
 
       <button
-        class="danger"
-        onclick="toggleLock()"
-      >
+        class="primary"
+        onclick="nextQuestion()"
         ${
-          state.locked
-            ? "답변 재개"
-            : "답변 잠금"
+          state.current >=
+          state.questions.length - 1
+            ? "disabled"
+            : ""
         }
+      >
+        다음 문제
       </button>
+
+      ${
+        state.locked
+          ? `
+            <button
+              class="green"
+              onclick="unlockQuestion()"
+            >
+              답변 열기
+            </button>
+          `
+          : `
+            <button
+              class="gray"
+              onclick="lockQuestion()"
+            >
+              답변 잠그기
+            </button>
+          `
+      }
 
       <button
         class="green"
-        onclick="reveal()"
+        onclick="revealAnswer()"
+        ${state.revealed ? "disabled" : ""}
       >
         정답 공개
       </button>
 
       <button
-        class="primary"
-        onclick="nextQ()"
-      >
-        다음 문제
-      </button>
-
-    </div>
-
-    <div class="card">
-
-      <h2>
-        참가자 (${state.participants.length})
-      </h2>
-
-      <table>
-
-        <tr>
-          <th>이름</th>
-          <th>현재 답</th>
-          <th>점수</th>
-        </tr>
-
-        ${state.participants
-          .slice()
-          .sort(
-            (a, b) =>
-              b.score - a.score
-          )
-          .map(
-            p => `
-              <tr>
-                <td>${esc(p.name)}</td>
-                <td>${esc(p.answer || "미응답")}</td>
-                <td class="score">
-                  ${p.score}
-                </td>
-              </tr>
-            `
-          )
-          .join("")}
-
-      </table>
-
-      <button
-        class="gray"
+        class="danger"
         onclick="resetScores()"
       >
         점수 초기화
       </button>
 
     </div>
+
+    <hr>
+
+    <h3>참가자</h3>
+
+    <div id="players"></div>
   `;
+
+  renderPlayers();
 }
 
-/* =========================
-   진행자 문제 조작
-========================= */
+function renderPlayers() {
+  const el =
+    document.getElementById("players");
 
-function toggleLock() {
-  socket.emit(
-    state.locked
-      ? "host:unlock"
-      : "host:lock"
+  if (!el) return;
+
+  const players =
+    Array.isArray(state?.participants)
+      ? [...state.participants]
+      : [];
+
+  if (!players.length) {
+    el.innerHTML = `
+      <p class="muted">
+        아직 참가자가 없습니다.
+      </p>
+    `;
+    return;
+  }
+
+  players.sort(
+    (a, b) =>
+      (Number(b.score) || 0) -
+      (Number(a.score) || 0)
   );
+
+  el.innerHTML = players
+    .map(
+      p => `
+        <div class="card">
+          <b>${esc(p.name)}</b>
+
+          <span>
+            ${Number(p.score) || 0}점
+            ${
+              p.answer
+                ? ` · 답변: ${esc(p.answer)}`
+                : ""
+            }
+          </span>
+        </div>
+      `
+    )
+    .join("");
 }
 
-function reveal() {
-  socket.emit("host:reveal");
-}
-
-function nextQ() {
+function nextQuestion() {
   socket.emit("host:next");
 }
 
-function prevQ() {
+function prevQuestion() {
   socket.emit("host:prev");
+}
+
+function lockQuestion() {
+  socket.emit("host:lock");
+}
+
+function unlockQuestion() {
+  socket.emit("host:unlock");
+}
+
+function revealAnswer() {
+  socket.emit("host:reveal");
 }
 
 function resetScores() {
@@ -720,54 +824,58 @@ function resetScores() {
 }
 
 /* =========================
-   참가자
+   PLAYER JOIN
 ========================= */
 
-function joinPage() {
+function openJoin() {
+  role = "player";
+  renderJoin();
+}
+
+function renderJoin() {
   app.innerHTML = `
     <div class="wrap">
+      <div class="card auth">
 
-      <div class="card">
-
-        <h1>QuizShow 참가</h1>
-
-        <p class="muted">
-          진행자가 알려준 방 코드와 이름을 입력하세요.
-        </p>
+        <h1>퀴즈 참가</h1>
 
         <input
-          id="code"
+          id="roomCode"
           placeholder="방 코드"
+          maxlength="6"
+          style="text-transform:uppercase;"
         >
 
         <input
-          id="name"
+          id="playerName"
           placeholder="이름"
+          maxlength="20"
         >
 
         <button
           class="primary"
-          onclick="join()"
+          onclick="joinRoom()"
         >
-          입장
+          참가하기
         </button>
 
       </div>
-
     </div>
   `;
 }
 
-function join() {
+function joinRoom() {
   const code =
-    document.getElementById("code")
-      .value
+    document.getElementById(
+      "roomCode"
+    )?.value
       .trim()
       .toUpperCase();
 
   const name =
-    document.getElementById("name")
-      .value
+    document.getElementById(
+      "playerName"
+    )?.value
       .trim();
 
   if (!code) {
@@ -780,45 +888,31 @@ function join() {
 
   myName = name;
 
-  socket.emit("join", {
-    code,
-    name
-  });
+  socket.emit(
+    "join",
+    {
+      code,
+      name
+    }
+  );
 }
 
-socket.on("joined", x => {
-  myName = x.name;
+socket.on("joined", ({ code, name }) => {
   role = "player";
-  renderPlayer();
+  myName = name || myName;
+  loadedRoomCode = code;
+  myAnswer = null;
+
+  app.innerHTML = `
+    <div class="wrap">
+      <div class="card">
+        <p class="muted">
+          방에 참가했습니다. 퀴즈가 시작되면 문제가 표시됩니다.
+        </p>
+      </div>
+    </div>
+  `;
 });
-
-/* =========================
-   실시간 상태
-========================= */
-
-socket.on("state", s => {
-  state = s;
-
-  if (role === "host") {
-    /*
-      기존 방 불러오기 또는 새 방 생성 후
-      서버에서 state가 도착하면 진행자 화면 표시
-    */
-    hostPage(state.code);
-  }
-
-  else if (role === "player") {
-    renderPlayer();
-  }
-});
-
-socket.on("errorMsg", m => {
-  alert(m);
-});
-
-/* =========================
-   참가자 화면
-========================= */
 
 function renderPlayer() {
   if (!state) return;
@@ -826,37 +920,35 @@ function renderPlayer() {
   const q =
     state.questions[state.current];
 
-  if (!q) return;
+  if (!q) {
+    app.innerHTML = `
+      <div class="wrap">
+        <div class="card">
+          <h1>퀴즈 준비 중</h1>
+          <p class="muted">
+            진행자가 문제를 준비하고 있습니다.
+          </p>
+        </div>
+      </div>
+    `;
+    return;
+  }
 
   const me =
-    state.participants.find(
-      p => p.name === myName
-    );
+    Array.isArray(state.participants)
+      ? state.participants.find(
+          p => p.id === socket.id
+        )
+      : null;
 
-  myAnswer =
+  const score =
+    Number(me?.score) || 0;
+
+  const serverAnswer =
     me?.answer || null;
 
-  let result = "";
-
-  if (state.revealed && myAnswer) {
-    if (myAnswer === q.answer) {
-      result = `
-        <div class="answerMark correct"></div>
-        <h2 class="correct">
-          정답입니다!
-        </h2>
-      `;
-    } else {
-      result = `
-        <div class="answerMark wrong">
-          ✕
-        </div>
-
-        <h2 class="wrong">
-          오답입니다.
-        </h2>
-      `;
-    }
+  if (serverAnswer) {
+    myAnswer = serverAnswer;
   }
 
   app.innerHTML = `
@@ -866,64 +958,108 @@ function renderPlayer() {
 
         <div class="top">
 
+          <div>
+            <h1>우리들의 퀴즈쇼</h1>
+
+            <span class="badge">
+              ${esc(myName)}
+            </span>
+          </div>
+
           <span class="badge">
-            Q${state.current + 1}
-          </span>
-
-          <span class="score">
-            내 점수:
-            ${me?.score || 0}
+            ${score}점
           </span>
 
         </div>
 
-        <h1>
+        <h2>
+          Q${state.current + 1}.
           ${esc(q.question)}
-        </h1>
+        </h2>
 
-        <div class="options">
+        ${
+          state.revealed
+            ? `
+              <div class="card">
+                <b>정답</b>
+                <p>
+                  ${esc(q.answer)}
+                </p>
 
-          ${q.options
-            .map(
-              o => `
-                <button
-                  class="opt ${
-                    myAnswer === o.value
-                      ? "selected"
+                ${
+                  myAnswer === q.answer
+                    ? `
+                      <p>
+                        정답입니다!
+                        +${Number(q.points) || 0}점
+                      </p>
+                    `
+                    : myAnswer
+                      ? `
+                        <p>
+                          오답입니다.
+                        </p>
+                      `
                       : ""
-                  }"
-                  ${
-                    state.locked ||
-                    state.revealed
-                      ? "disabled"
-                      : ""
-                  }
-                  onclick="answer('${esc(o.value)}')"
-                >
-                  ${esc(o.value)}
-                  ·
-                  ${esc(o.label)}
-                </button>
+                }
+              </div>
+            `
+            : state.locked
+              ? `
+                <p class="muted">
+                  답변이 잠겼습니다.
+                </p>
+
+                ${
+                  myAnswer
+                    ? `
+                      <p>
+                        제출한 답:
+                        <b>${esc(myAnswer)}</b>
+                      </p>
+                    `
+                    : ""
+                }
               `
-            )
-            .join("")}
+              : `
+                <div class="options">
 
-        </div>
+                  ${q.options
+                    .map(
+                      o => `
+                        <button
+                          class="option"
+                          onclick="answerQuestion('${esc(o.value)}')"
+                          ${
+                            myAnswer
+                              ? "disabled"
+                              : ""
+                          }
+                        >
+                          ${
+                            q.type === "ox"
+                              ? esc(o.label)
+                              : `<b>${esc(o.value)}</b> ${esc(o.label)}`
+                          }
+                        </button>
+                      `
+                    )
+                    .join("")}
 
-        <p class="muted">
+                </div>
 
-          ${
-            myAnswer
-              ? `내가 선택한 답:
-                 ${esc(myAnswer)}`
-              : state.locked
-              ? "답변이 잠겼습니다."
-              : "답을 선택해주세요."
-          }
-
-        </p>
-
-        ${result}
+                ${
+                  myAnswer
+                    ? `
+                      <p class="muted">
+                        제출한 답:
+                        <b>${esc(myAnswer)}</b>
+                      </p>
+                    `
+                    : ""
+                }
+              `
+        }
 
       </div>
 
@@ -931,18 +1067,85 @@ function renderPlayer() {
   `;
 }
 
-function answer(v) {
-  socket.emit("answer", v);
+function answerQuestion(answer) {
+  if (myAnswer) return;
+  if (state?.locked || state?.revealed) return;
+
+  const q =
+    state?.questions?.[state.current];
+
+  if (!q) return;
+
+  if (
+    !q.options.some(
+      o => o.value === answer
+    )
+  ) {
+    return;
+  }
+
+  myAnswer = answer;
+
+  /*
+    server.js는 answer 이벤트에서
+    값을 직접 받으므로 객체가 아니라
+    answer 문자열을 보낸다.
+  */
+  socket.emit("answer", answer);
+
+  renderPlayer();
 }
 
 /* =========================
-   페이지 시작
+   BOOT
 ========================= */
 
-if (
-  location.pathname.startsWith("/host")
-) {
-  hostLogin();
-} else {
-  joinPage();
+function boot() {
+  const path =
+    window.location.pathname;
+
+  if (path === "/host") {
+    hostLogin();
+    return;
+  }
+
+  if (path === "/join") {
+    openJoin();
+    return;
+  }
+
+  app.innerHTML = `
+    <div class="wrap">
+      <div class="card auth">
+
+        <h1>우리들의 퀴즈쇼</h1>
+
+        <p class="muted">
+          진행자는 /host,
+          참가자는 /join으로 접속하세요.
+        </p>
+
+        <div class="top">
+
+          <button
+            class="primary"
+            onclick="location.href='/host'"
+          >
+            진행자
+          </button>
+
+          <button
+            class="green"
+            onclick="location.href='/join'"
+          >
+            참가자
+          </button>
+
+        </div>
+
+      </div>
+    </div>
+  `;
 }
+
+boot();
