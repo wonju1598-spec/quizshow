@@ -65,6 +65,29 @@ function makeOptions(type) {
 }
 
 /* =========================
+   보기 없음 정답 처리
+========================= */
+
+function isNoOptionAnswer(answer) {
+  return String(answer || "").startsWith("__NO_OPTION__|");
+}
+
+function getNoOptionCorrectAnswer(answer) {
+  if (!isNoOptionAnswer(answer)) return "";
+  return String(answer).slice("__NO_OPTION__|".length);
+}
+
+function getDisplayAnswer(q) {
+  if (!q) return "";
+
+  if (isNoOptionAnswer(q.answer)) {
+    return getNoOptionCorrectAnswer(q.answer);
+  }
+
+  return q.answer || "";
+}
+
+/* =========================
    COMMON SOCKET ERRORS
 ========================= */
 
@@ -181,6 +204,7 @@ socket.on("host:createPasswordResult", r => {
 
   const a = document.getElementById("newHostPw");
   const b = document.getElementById("newHostPw2");
+
   if (a) a.value = "";
   if (b) b.value = "";
 });
@@ -432,7 +456,31 @@ function renderEditor() {
           )
           .join("")}
 
+        <option
+          value="__NO_OPTION__"
+          ${isNoOptionAnswer(q.answer) ? "selected" : ""}
+        >
+          보기 없음
+        </option>
+
       </select>
+
+      <div
+        class="no-option-answer"
+        style="${isNoOptionAnswer(q.answer) ? "display:block;" : "display:none;"} margin-top:8px;"
+      >
+        <label>실제 정답</label>
+
+        <input
+          data-k="noOptionAnswer"
+          value="${esc(getNoOptionCorrectAnswer(q.answer))}"
+          placeholder="보기에는 없는 실제 정답을 입력하세요"
+        >
+
+        <p class="muted" style="margin-top:6px;">
+          참가자는 보기 중 하나를 선택하지만, 어떤 보기를 선택해도 오답 처리됩니다.
+        </p>
+      </div>
     `;
 
     const typeSelect =
@@ -455,6 +503,28 @@ function renderEditor() {
       )
       .forEach(x => {
         x.onchange = () => {
+          if (x.dataset.k === "answer") {
+            if (x.value === "__NO_OPTION__") {
+              const actual =
+                getNoOptionCorrectAnswer(q.answer);
+
+              q.answer =
+                "__NO_OPTION__|" + actual;
+
+              renderEditor();
+              saveQuiz();
+
+              return;
+            }
+
+            q.answer = x.value;
+
+            saveQuiz();
+            renderEditor();
+
+            return;
+          }
+
           updateQ(q, d);
         };
       });
@@ -473,6 +543,21 @@ function renderEditor() {
         };
       });
 
+    const noOptionInput =
+      d.querySelector(
+        '[data-k="noOptionAnswer"]'
+      );
+
+    if (noOptionInput) {
+      noOptionInput.oninput = () => {
+        q.answer =
+          "__NO_OPTION__|" +
+          noOptionInput.value;
+
+        saveQuiz();
+      };
+    }
+
     ed.appendChild(d);
   });
 }
@@ -490,10 +575,31 @@ function updateQ(q, d) {
       ).value
     ) || 0;
 
-  q.answer =
+  const answerSelect =
     d.querySelector(
       '[data-k="answer"]'
-    ).value;
+    );
+
+  if (answerSelect) {
+    if (
+      answerSelect.value ===
+      "__NO_OPTION__"
+    ) {
+      const actual =
+        d.querySelector(
+          '[data-k="noOptionAnswer"]'
+        )?.value ||
+        getNoOptionCorrectAnswer(
+          q.answer
+        );
+
+      q.answer =
+        "__NO_OPTION__|" + actual;
+    } else {
+      q.answer =
+        answerSelect.value;
+    }
+  }
 
   saveQuiz();
 }
@@ -514,6 +620,7 @@ function saveQuiz() {
 
 function delQ(i) {
   hostQuestions.splice(i, 1);
+
   renderEditor();
   saveQuiz();
 }
@@ -551,6 +658,7 @@ function createRoom() {
 socket.on("host:created", ({ code }) => {
   loadedRoomCode = code;
   role = "host";
+
   hostPage(code);
 });
 
@@ -559,18 +667,32 @@ socket.on("host:created", ({ code }) => {
 ========================= */
 
 function createNewHostPassword() {
-  const a = document.getElementById("newHostPw")?.value || "";
-  const b = document.getElementById("newHostPw2")?.value || "";
+  const a =
+    document.getElementById(
+      "newHostPw"
+    )?.value || "";
+
+  const b =
+    document.getElementById(
+      "newHostPw2"
+    )?.value || "";
 
   if (a.length < 4) {
-    return alert("새 비밀번호는 4자 이상으로 설정해주세요.");
+    return alert(
+      "새 비밀번호는 4자 이상으로 설정해주세요."
+    );
   }
 
   if (a !== b) {
-    return alert("새 비밀번호가 서로 다릅니다.");
+    return alert(
+      "새 비밀번호가 서로 다릅니다."
+    );
   }
 
-  socket.emit("host:createPassword", a);
+  socket.emit(
+    "host:createPassword",
+    a
+  );
 }
 
 function loadExistingRoom() {
@@ -587,7 +709,9 @@ function loadExistingRoom() {
       .toUpperCase();
 
   if (!code) {
-    return alert("방 코드를 입력해주세요.");
+    return alert(
+      "방 코드를 입력해주세요."
+    );
   }
 
   loadedRoomCode = code;
@@ -677,7 +801,9 @@ function hostPage(code) {
 
 function renderHost() {
   const main =
-    document.getElementById("hostMain");
+    document.getElementById(
+      "hostMain"
+    );
 
   if (!main) return;
 
@@ -687,6 +813,7 @@ function renderHost() {
         방 정보를 불러오는 중입니다...
       </p>
     `;
+
     return;
   }
 
@@ -699,6 +826,7 @@ function renderHost() {
         등록된 문제가 없습니다.
       </p>
     `;
+
     return;
   }
 
@@ -808,7 +936,9 @@ function renderHost() {
 
 function renderPlayers() {
   const el =
-    document.getElementById("players");
+    document.getElementById(
+      "players"
+    );
 
   if (!el) return;
 
@@ -823,6 +953,7 @@ function renderPlayers() {
         아직 참가자가 없습니다.
       </p>
     `;
+
     return;
   }
 
@@ -878,7 +1009,9 @@ function resetScores() {
       "모든 참가자의 점수를 0점으로 초기화할까요?"
     )
   ) {
-    socket.emit("host:resetScores");
+    socket.emit(
+      "host:resetScores"
+    );
   }
 }
 
@@ -938,11 +1071,15 @@ function joinRoom() {
       .trim();
 
   if (!code) {
-    return alert("방 코드를 입력해주세요.");
+    return alert(
+      "방 코드를 입력해주세요."
+    );
   }
 
   if (!name) {
-    return alert("이름을 입력해주세요.");
+    return alert(
+      "이름을 입력해주세요."
+    );
   }
 
   myName = name;
@@ -984,12 +1121,14 @@ function renderPlayer() {
       <div class="wrap">
         <div class="card">
           <h1>퀴즈 준비 중</h1>
+
           <p class="muted">
             진행자가 문제를 준비하고 있습니다.
           </p>
         </div>
       </div>
     `;
+
     return;
   }
 
@@ -1018,7 +1157,12 @@ function renderPlayer() {
         <div class="top">
 
           <div>
-            <h1>${esc(state.title || "우리들의 퀴즈쇼")}</h1>
+            <h1>
+              ${esc(
+                state.title ||
+                "우리들의 퀴즈쇼"
+              )}
+            </h1>
 
             <span class="badge">
               ${esc(myName)}
@@ -1040,9 +1184,13 @@ function renderPlayer() {
           state.revealed
             ? `
               <div class="card">
+
                 <b>정답</b>
+
                 <p>
-                  ${esc(q.answer)}
+                  ${esc(
+                    getDisplayAnswer(q)
+                  )}
                 </p>
 
                 ${
@@ -1061,6 +1209,7 @@ function renderPlayer() {
                       `
                       : ""
                 }
+
               </div>
             `
             : state.locked
@@ -1125,7 +1274,13 @@ function renderPlayer() {
 
 function answerQuestion(answer) {
   if (myAnswer) return;
-  if (state?.locked || state?.revealed) return;
+
+  if (
+    state?.locked ||
+    state?.revealed
+  ) {
+    return;
+  }
 
   const q =
     state?.questions?.[state.current];
@@ -1147,7 +1302,11 @@ function answerQuestion(answer) {
     값을 직접 받으므로 객체가 아니라
     answer 문자열을 보낸다.
   */
-  socket.emit("answer", answer);
+
+  socket.emit(
+    "answer",
+    answer
+  );
 
   renderPlayer();
 }
