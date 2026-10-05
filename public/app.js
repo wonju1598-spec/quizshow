@@ -1018,7 +1018,7 @@ function renderPlayer() {
         <div class="top">
 
           <div>
-            <h1>우리들의 퀴즈쇼</h1>
+            <h1>${esc(state.title || "우리들의 퀴즈쇼")}</h1>
 
             <span class="badge">
               ${esc(myName)}
