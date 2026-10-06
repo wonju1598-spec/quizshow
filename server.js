@@ -1,4 +1,4 @@
-const express = require("express");
+express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const path = require("path");
@@ -15,9 +15,7 @@ app.use(express.static(path.join(__dirname, "public")));
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL
-    ? { rejectUnauthorized: false }
-    : false
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
 });
 
 async function db(sql, params = []) {
@@ -26,9 +24,7 @@ async function db(sql, params = []) {
 
 async function initDb() {
   if (!process.env.DATABASE_URL) {
-    console.warn(
-      "DATABASE_URL이 없습니다. Render에 Postgres를 연결해주세요."
-    );
+    console.warn("DATABASE_URL이 없습니다. Render에 Postgres를 연결해주세요.");
     return;
   }
 
@@ -56,12 +52,14 @@ async function initDb() {
             VALUES(1,'우리들의 퀴즈쇼')
             ON CONFLICT(id) DO NOTHING`);
 
+  // 추가 진행자 계정. id=1은 기존 진행자 계정으로 사용합니다.
   await db(`CREATE TABLE IF NOT EXISTS host_accounts (
     id SERIAL PRIMARY KEY,
     password_hash TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
 
+  // 새 진행자 계정의 퀴즈는 기존 quiz_questions와 완전히 별도로 저장합니다.
   await db(`CREATE TABLE IF NOT EXISTS workspace_quizzes (
     host_account_id INTEGER PRIMARY KEY REFERENCES host_accounts(id) ON DELETE CASCADE,
     title TEXT NOT NULL DEFAULT '우리들의 퀴즈쇼',
@@ -69,13 +67,9 @@ async function initDb() {
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
 
-  const old = await db(
-    "SELECT value FROM app_settings WHERE key='host_password_hash'"
-  );
-
-  const account = await db(
-    "SELECT id FROM host_accounts WHERE id=1"
-  );
+  // 기존 비밀번호를 절대로 바꾸지 않고, 계정 1번으로 연결합니다.
+  const old = await db("SELECT value FROM app_settings WHERE key='host_password_hash'");
+  const account = await db("SELECT id FROM host_accounts WHERE id=1");
 
   if (old.rows[0] && !account.rows[0]) {
     await db(
@@ -106,18 +100,14 @@ async function getLegacyQuiz() {
   );
 
   return {
-    title:
-      meta.rows[0]?.title ||
-      "우리들의 퀴즈쇼",
+    title: meta.rows[0]?.title || "우리들의 퀴즈쇼",
     questions: rows.rows
   };
 }
 
 async function saveLegacyQuiz(title, questions) {
   if (!process.env.DATABASE_URL) {
-    throw new Error(
-      "DATABASE_URL이 설정되지 않았습니다."
-    );
+    throw new Error("DATABASE_URL이 설정되지 않았습니다.");
   }
 
   const client = await pool.connect();
@@ -130,9 +120,7 @@ async function saveLegacyQuiz(title, questions) {
       [title || "우리들의 퀴즈쇼"]
     );
 
-    await client.query(
-      "DELETE FROM quiz_questions"
-    );
+    await client.query("DELETE FROM quiz_questions");
 
     for (let i = 0; i < questions.length; i++) {
       const q = questions[i];
@@ -140,12 +128,7 @@ async function saveLegacyQuiz(title, questions) {
       await client.query(
         "INSERT INTO quiz_questions(id,position,question,type,options,answer,points) VALUES($1,$2,$3,$4,$5,$6,$7)",
         [
-          String(
-            q.id ||
-            "q" +
-              Date.now() +
-              i
-          ),
+          String(q.id || "q" + Date.now() + i),
           i,
           String(q.question || ""),
           String(q.type || "single"),
@@ -186,42 +169,36 @@ async function getWorkspaceQuiz(accountId) {
   }
 
   return {
-    title:
-      r.rows[0].title ||
-      "우리들의 퀴즈쇼",
-
-    questions:
-      Array.isArray(r.rows[0].questions)
-        ? r.rows[0].questions
-        : []
+    title: r.rows[0].title || "우리들의 퀴즈쇼",
+    questions: Array.isArray(r.rows[0].questions)
+      ? r.rows[0].questions
+      : []
   };
 }
 
-async function saveWorkspaceQuiz(
-  accountId,
-  title,
-  questions
-) {
+async function saveWorkspaceQuiz(accountId, title, questions) {
   if (!process.env.DATABASE_URL) {
-    throw new Error(
-      "DATABASE_URL이 설정되지 않았습니다."
-    );
+    throw new Error("DATABASE_URL이 설정되지 않았습니다.");
   }
 
   await db(
-    `INSERT INTO workspace_quizzes(host_account_id,title,questions,updated_at)
-     VALUES($1,$2,$3,NOW())
-     ON CONFLICT(host_account_id)
-     DO UPDATE SET title=EXCLUDED.title,
-                   questions=EXCLUDED.questions,
-                   updated_at=NOW()`,
+    `INSERT INTO workspace_quizzes(
+      host_account_id,
+      title,
+      questions,
+      updated_at
+    )
+    VALUES($1,$2,$3,NOW())
+    ON CONFLICT(host_account_id)
+    DO UPDATE SET
+      title=EXCLUDED.title,
+      questions=EXCLUDED.questions,
+      updated_at=NOW()`,
     [
       accountId,
       title || "우리들의 퀴즈쇼",
       JSON.stringify(
-        Array.isArray(questions)
-          ? questions
-          : []
+        Array.isArray(questions) ? questions : []
       )
     ]
   );
@@ -235,29 +212,16 @@ async function getQuizForAccount(accountId) {
   return getWorkspaceQuiz(accountId);
 }
 
-async function saveQuizForAccount(
-  accountId,
-  title,
-  questions
-) {
+async function saveQuizForAccount(accountId, title, questions) {
   if (Number(accountId) === 1) {
-    return saveLegacyQuiz(
-      title,
-      questions
-    );
+    return saveLegacyQuiz(title, questions);
   }
 
-  return saveWorkspaceQuiz(
-    accountId,
-    title,
-    questions
-  );
+  return saveWorkspaceQuiz(accountId, title, questions);
 }
 
 async function passwordExists() {
-  if (!process.env.DATABASE_URL) {
-    return false;
-  }
+  if (!process.env.DATABASE_URL) return false;
 
   const r = await db(
     "SELECT id FROM host_accounts ORDER BY id LIMIT 1"
@@ -267,21 +231,14 @@ async function passwordExists() {
 }
 
 async function checkPassword(password) {
-  if (!process.env.DATABASE_URL) {
-    return null;
-  }
+  if (!process.env.DATABASE_URL) return null;
 
   const r = await db(
     "SELECT id,password_hash FROM host_accounts ORDER BY id ASC"
   );
 
   for (const row of r.rows) {
-    if (
-      await bcrypt.compare(
-        password,
-        row.password_hash
-      )
-    ) {
+    if (await bcrypt.compare(password, row.password_hash)) {
       return Number(row.id);
     }
   }
@@ -291,16 +248,10 @@ async function checkPassword(password) {
 
 async function createHostAccount(password) {
   if (!process.env.DATABASE_URL) {
-    throw new Error(
-      "DATABASE_URL이 설정되지 않았습니다."
-    );
+    throw new Error("DATABASE_URL이 설정되지 않았습니다.");
   }
 
-  const hash =
-    await bcrypt.hash(
-      password,
-      12
-    );
+  const hash = await bcrypt.hash(password, 12);
 
   const r = await db(
     "INSERT INTO host_accounts(password_hash) VALUES($1) RETURNING id",
@@ -311,21 +262,14 @@ async function createHostAccount(password) {
 }
 
 async function hasPasswordDuplicate(password) {
-  if (!process.env.DATABASE_URL) {
-    return false;
-  }
+  if (!process.env.DATABASE_URL) return false;
 
   const r = await db(
     "SELECT password_hash FROM host_accounts"
   );
 
   for (const row of r.rows) {
-    if (
-      await bcrypt.compare(
-        password,
-        row.password_hash
-      )
-    ) {
+    if (await bcrypt.compare(password, row.password_hash)) {
       return true;
     }
   }
@@ -333,23 +277,32 @@ async function hasPasswordDuplicate(password) {
   return false;
 }
 
+
+/* =========================================================
+   정답 특수 기능
+   ========================================================= */
+
+// 모든 보기 정답
+function isAllOptionsAnswer(answer) {
+  return String(answer || "") === "__ALL_OPTIONS__";
+}
+
+// 보기 없음 정답
+// 실제 정답은 "__NO_OPTION__|실제정답" 형태로 저장
+function isNoOptionAnswer(answer) {
+  return String(answer || "").startsWith("__NO_OPTION__|");
+}
+
+
+/* =========================================================
+   방 관리
+   ========================================================= */
+
 const rooms = new Map();
 const hostSessions = new Set();
 
 function code() {
-  return crypto
-    .randomBytes(3)
-    .toString("hex")
-    .toUpperCase();
-}
-
-/* =========================
-   보기 없음 정답 확인
-========================= */
-
-function isNoOptionAnswer(answer) {
-  return String(answer || "")
-    .startsWith("__NO_OPTION__|");
+  return crypto.randomBytes(3).toString("hex").toUpperCase();
 }
 
 function cleanRoom(room) {
@@ -361,15 +314,14 @@ function cleanRoom(room) {
     locked: room.locked,
     revealed: room.revealed,
 
-    participants:
-      [
-        ...room.participants.values()
-      ].map(p => ({
-        id: p.id,
-        name: p.name,
-        score: p.score,
-        answer: p.answer
-      }))
+    participants: [
+      ...room.participants.values()
+    ].map(p => ({
+      id: p.id,
+      name: p.name,
+      score: p.score,
+      answer: p.answer
+    }))
   };
 }
 
@@ -381,71 +333,68 @@ function broadcast(room) {
 }
 
 function requireHost(socket) {
-  return (
-    !!socket.data.hostAuth &&
-    !!socket.data.accountId
-  );
+  return !!socket.data.hostAuth &&
+         !!socket.data.accountId;
 }
 
-app.get(
-  "/health",
-  (_, res) =>
-    res.json({ ok: true })
-);
 
-app.get(
-  "/host",
-  (_, res) =>
-    res.sendFile(
-      path.join(
-        __dirname,
-        "public",
-        "index.html"
-      )
-    )
-);
+/* =========================================================
+   HTTP
+   ========================================================= */
 
-app.get(
-  "/join",
-  (_, res) =>
-    res.sendFile(
-      path.join(
-        __dirname,
-        "public",
-        "index.html"
-      )
-    )
-);
+app.get("/health", (_, res) => {
+  res.json({ ok: true });
+});
 
-app.get(
-  "/",
-  (_, res) =>
-    res.redirect("/join")
-);
+app.get("/host", (_, res) => {
+  res.sendFile(
+    path.join(__dirname, "public", "index.html")
+  );
+});
+
+app.get("/join", (_, res) => {
+  res.sendFile(
+    path.join(__dirname, "public", "index.html")
+  );
+});
+
+app.get("/", (_, res) => {
+  res.redirect("/join");
+});
+
+
+/* =========================================================
+   SOCKET.IO
+   ========================================================= */
 
 io.on("connection", socket => {
 
-  socket.on(
-    "host:status",
-    async () => {
-      try {
-        socket.emit(
-          "host:status",
-          {
-            configured:
-              await passwordExists()
-          }
-        );
-      } catch (e) {
-        console.error(e);
+  /* -------------------------------------------------------
+     진행자 상태 확인
+     ------------------------------------------------------- */
 
-        socket.emit(
-          "errorMsg",
-          "DB 연결을 확인해주세요."
-        );
-      }
+  socket.on("host:status", async () => {
+    try {
+      socket.emit(
+        "host:status",
+        {
+          configured: await passwordExists()
+        }
+      );
+    } catch (e) {
+      console.error(e);
+
+      socket.emit(
+        "errorMsg",
+        "DB 연결을 확인해주세요."
+      );
     }
-  );
+  });
+
+
+  /* -------------------------------------------------------
+     최초 비밀번호 설정
+     ------------------------------------------------------- */
 
   socket.on(
     "host:setupPassword",
@@ -462,8 +411,7 @@ io.on("connection", socket => {
           );
         }
 
-        password =
-          String(password || "");
+        password = String(password || "");
 
         if (password.length < 4) {
           return socket.emit(
@@ -477,19 +425,12 @@ io.on("connection", socket => {
         }
 
         const accountId =
-          await createHostAccount(
-            password
-          );
+          await createHostAccount(password);
 
-        hostSessions.add(
-          socket.id
-        );
+        hostSessions.add(socket.id);
 
-        socket.data.hostAuth =
-          true;
-
-        socket.data.accountId =
-          accountId;
+        socket.data.hostAuth = true;
+        socket.data.accountId = accountId;
 
         socket.emit(
           "host:passwordSet",
@@ -514,6 +455,11 @@ io.on("connection", socket => {
     }
   );
 
+
+  /* -------------------------------------------------------
+     진행자 로그인
+     ------------------------------------------------------- */
+
   socket.on(
     "host:login",
     async password => {
@@ -524,15 +470,10 @@ io.on("connection", socket => {
           );
 
         if (accountId) {
-          hostSessions.add(
-            socket.id
-          );
+          hostSessions.add(socket.id);
 
-          socket.data.hostAuth =
-            true;
-
-          socket.data.accountId =
-            accountId;
+          socket.data.hostAuth = true;
+          socket.data.accountId = accountId;
 
           socket.emit(
             "host:loginResult",
@@ -567,9 +508,15 @@ io.on("connection", socket => {
     }
   );
 
+
+  /* -------------------------------------------------------
+     새 진행자 비밀번호 생성
+     ------------------------------------------------------- */
+
   socket.on(
     "host:createPassword",
     async password => {
+
       if (!requireHost(socket)) {
         return socket.emit(
           "host:createPasswordResult",
@@ -582,8 +529,7 @@ io.on("connection", socket => {
       }
 
       try {
-        password =
-          String(password || "");
+        password = String(password || "");
 
         if (password.length < 4) {
           return socket.emit(
@@ -596,11 +542,7 @@ io.on("connection", socket => {
           );
         }
 
-        if (
-          await hasPasswordDuplicate(
-            password
-          )
-        ) {
+        if (await hasPasswordDuplicate(password)) {
           return socket.emit(
             "host:createPasswordResult",
             {
@@ -612,9 +554,7 @@ io.on("connection", socket => {
         }
 
         const accountId =
-          await createHostAccount(
-            password
-          );
+          await createHostAccount(password);
 
         socket.emit(
           "host:createPasswordResult",
@@ -641,9 +581,15 @@ io.on("connection", socket => {
     }
   );
 
+
+  /* -------------------------------------------------------
+     저장된 퀴즈 불러오기
+     ------------------------------------------------------- */
+
   socket.on(
     "host:getQuiz",
     async () => {
+
       if (!requireHost(socket)) {
         return socket.emit(
           "errorMsg",
@@ -669,12 +615,15 @@ io.on("connection", socket => {
     }
   );
 
+
+  /* -------------------------------------------------------
+     퀴즈 저장
+     ------------------------------------------------------- */
+
   socket.on(
     "host:saveQuiz",
-    async ({
-      title,
-      questions
-    }) => {
+    async ({ title, questions }) => {
+
       if (!requireHost(socket)) {
         return socket.emit(
           "errorMsg",
@@ -686,16 +635,12 @@ io.on("connection", socket => {
         await saveQuizForAccount(
           socket.data.accountId,
           title,
-          Array.isArray(
-            questions
-          )
+          Array.isArray(questions)
             ? questions
             : []
         );
 
-        socket.emit(
-          "host:saved"
-        );
+        socket.emit("host:saved");
 
       } catch (e) {
         console.error(e);
@@ -708,12 +653,15 @@ io.on("connection", socket => {
     }
   );
 
+
+  /* -------------------------------------------------------
+     방 만들기
+     ------------------------------------------------------- */
+
   socket.on(
     "host:create",
-    async ({
-      title,
-      questions
-    }) => {
+    async ({ title, questions }) => {
+
       if (!requireHost(socket)) {
         return socket.emit(
           "errorMsg",
@@ -734,19 +682,24 @@ io.on("connection", socket => {
 
       const room = {
         code: c,
+
         title:
           title || "퀴즈쇼",
+
         questions: quiz,
+
         current: 0,
+
         locked: false,
+
         revealed: false,
-        participants:
-          new Map(),
+
+        participants: new Map(),
+
         host: socket.id,
+
         ownerAccountId:
-          Number(
-            socket.data.accountId
-          )
+          Number(socket.data.accountId)
       };
 
       rooms.set(c, room);
@@ -768,16 +721,24 @@ io.on("connection", socket => {
 
       socket.emit(
         "host:created",
-        { code: c }
+        {
+          code: c
+        }
       );
 
       broadcast(room);
     }
   );
 
+
+  /* -------------------------------------------------------
+     기존 방 불러오기
+     ------------------------------------------------------- */
+
   socket.on(
     "host:load",
     ({ code: c }) => {
+
       if (!requireHost(socket)) {
         return socket.emit(
           "errorMsg",
@@ -787,8 +748,7 @@ io.on("connection", socket => {
 
       const room =
         rooms.get(
-          String(c || "")
-            .toUpperCase()
+          String(c || "").toUpperCase()
         );
 
       if (!room) {
@@ -799,12 +759,8 @@ io.on("connection", socket => {
       }
 
       if (
-        Number(
-          room.ownerAccountId
-        ) !==
-        Number(
-          socket.data.accountId
-        )
+        Number(room.ownerAccountId) !==
+        Number(socket.data.accountId)
       ) {
         return socket.emit(
           "errorMsg",
@@ -816,41 +772,37 @@ io.on("connection", socket => {
 
       socket.join(room.code);
 
-      socket.data.room =
-        room.code;
-
-      socket.data.role =
-        "host";
+      socket.data.room = room.code;
+      socket.data.role = "host";
 
       socket.emit(
         "host:ok",
-        { code: room.code }
+        {
+          code: room.code
+        }
       );
 
       broadcast(room);
     }
   );
 
+
+  /* -------------------------------------------------------
+     현재 문제 변경
+     ------------------------------------------------------- */
+
   socket.on(
     "host:question",
-    async ({
-      index,
-      question
-    }) => {
+    async ({ index, question }) => {
+
       const room =
-        rooms.get(
-          socket.data.room
-        );
+        rooms.get(socket.data.room);
 
       if (
         !room ||
         !requireHost(socket) ||
-        Number(
-          room.ownerAccountId
-        ) !==
-          Number(
-            socket.data.accountId
-          )
+        Number(room.ownerAccountId) !==
+          Number(socket.data.accountId)
       ) {
         return;
       }
@@ -858,17 +810,14 @@ io.on("connection", socket => {
       if (
         Number.isInteger(index) &&
         index >= 0 &&
-        index <
-          room.questions.length
+        index < room.questions.length
       ) {
-        room.current =
-          index;
+        room.current = index;
       }
 
       if (question) {
-        room.questions[
-          room.current
-        ] = question;
+        room.questions[room.current] =
+          question;
       }
 
       room.locked = false;
@@ -894,23 +843,23 @@ io.on("connection", socket => {
     }
   );
 
+
+  /* -------------------------------------------------------
+     전체 문제 업데이트
+     ------------------------------------------------------- */
+
   socket.on(
     "host:updateQuestions",
     async questions => {
+
       const room =
-        rooms.get(
-          socket.data.room
-        );
+        rooms.get(socket.data.room);
 
       if (
         !room ||
         !requireHost(socket) ||
-        Number(
-          room.ownerAccountId
-        ) !==
-          Number(
-            socket.data.accountId
-          )
+        Number(room.ownerAccountId) !==
+          Number(socket.data.accountId)
       ) {
         return;
       }
@@ -941,23 +890,23 @@ io.on("connection", socket => {
     }
   );
 
+
+  /* -------------------------------------------------------
+     잠금
+     ------------------------------------------------------- */
+
   socket.on(
     "host:lock",
     () => {
+
       const r =
-        rooms.get(
-          socket.data.room
-        );
+        rooms.get(socket.data.room);
 
       if (
         !r ||
         !requireHost(socket) ||
-        Number(
-          r.ownerAccountId
-        ) !==
-          Number(
-            socket.data.accountId
-          )
+        Number(r.ownerAccountId) !==
+          Number(socket.data.accountId)
       ) {
         return;
       }
@@ -968,23 +917,23 @@ io.on("connection", socket => {
     }
   );
 
+
+  /* -------------------------------------------------------
+     잠금 해제
+     ------------------------------------------------------- */
+
   socket.on(
     "host:unlock",
     () => {
+
       const r =
-        rooms.get(
-          socket.data.room
-        );
+        rooms.get(socket.data.room);
 
       if (
         !r ||
         !requireHost(socket) ||
-        Number(
-          r.ownerAccountId
-        ) !==
-          Number(
-            socket.data.accountId
-          )
+        Number(r.ownerAccountId) !==
+          Number(socket.data.accountId)
       ) {
         return;
       }
@@ -995,28 +944,23 @@ io.on("connection", socket => {
     }
   );
 
-  /* =========================
-     정답 공개 및 점수 처리
-     보기 없음이면 모든 선택 오답
-  ========================= */
+
+  /* -------------------------------------------------------
+     정답 공개 + 점수 계산
+     ------------------------------------------------------- */
 
   socket.on(
     "host:reveal",
     async () => {
+
       const r =
-        rooms.get(
-          socket.data.room
-        );
+        rooms.get(socket.data.room);
 
       if (
         !r ||
         !requireHost(socket) ||
-        Number(
-          r.ownerAccountId
-        ) !==
-          Number(
-            socket.data.accountId
-          )
+        Number(r.ownerAccountId) !==
+          Number(socket.data.accountId)
       ) {
         return;
       }
@@ -1024,28 +968,34 @@ io.on("connection", socket => {
       r.revealed = true;
 
       const q =
-        r.questions[
-          r.current
-        ];
+        r.questions[r.current];
 
       for (
         const p of r.participants.values()
       ) {
 
-        /*
-          보기 없음(__NO_OPTION__)인 경우
-          참가자의 선택지와 절대로 일치하지 않으므로
-          모든 선택이 오답 처리됩니다.
-        */
+        if (!p.answer || !q) {
+          continue;
+        }
 
-        if (
-          p.answer &&
-          q &&
-          !isNoOptionAnswer(
-            q.answer
-          ) &&
-          p.answer === q.answer
-        ) {
+        /*
+         * 모든 보기 정답
+         * → 어떤 보기를 골라도 정답
+         */
+        const correct =
+          isAllOptionsAnswer(q.answer) ||
+          (
+            !isNoOptionAnswer(q.answer) &&
+            p.answer === q.answer
+          );
+
+        /*
+         * 보기 없음
+         * → 참가자가 선택할 수 있는 보기는
+         * 실제 정답에 포함되어 있지 않으므로
+         * 항상 오답 처리
+         */
+        if (correct) {
           p.score +=
             Number(q.points) || 0;
         }
@@ -1057,23 +1007,23 @@ io.on("connection", socket => {
     }
   );
 
+
+  /* -------------------------------------------------------
+     다음 문제
+     ------------------------------------------------------- */
+
   socket.on(
     "host:next",
     () => {
+
       const r =
-        rooms.get(
-          socket.data.room
-        );
+        rooms.get(socket.data.room);
 
       if (
         !r ||
         !requireHost(socket) ||
-        Number(
-          r.ownerAccountId
-        ) !==
-          Number(
-            socket.data.accountId
-          )
+        Number(r.ownerAccountId) !==
+          Number(socket.data.accountId)
       ) {
         return;
       }
@@ -1098,23 +1048,23 @@ io.on("connection", socket => {
     }
   );
 
+
+  /* -------------------------------------------------------
+     이전 문제
+     ------------------------------------------------------- */
+
   socket.on(
     "host:prev",
     () => {
+
       const r =
-        rooms.get(
-          socket.data.room
-        );
+        rooms.get(socket.data.room);
 
       if (
         !r ||
         !requireHost(socket) ||
-        Number(
-          r.ownerAccountId
-        ) !==
-          Number(
-            socket.data.accountId
-          )
+        Number(r.ownerAccountId) !==
+          Number(socket.data.accountId)
       ) {
         return;
       }
@@ -1136,23 +1086,23 @@ io.on("connection", socket => {
     }
   );
 
+
+  /* -------------------------------------------------------
+     점수 초기화
+     ------------------------------------------------------- */
+
   socket.on(
     "host:resetScores",
     () => {
+
       const r =
-        rooms.get(
-          socket.data.room
-        );
+        rooms.get(socket.data.room);
 
       if (
         !r ||
         !requireHost(socket) ||
-        Number(
-          r.ownerAccountId
-        ) !==
-          Number(
-            socket.data.accountId
-          )
+        Number(r.ownerAccountId) !==
+          Number(socket.data.accountId)
       ) {
         return;
       }
@@ -1167,16 +1117,18 @@ io.on("connection", socket => {
     }
   );
 
+
+  /* -------------------------------------------------------
+     참가자 입장
+     ------------------------------------------------------- */
+
   socket.on(
     "join",
-    ({
-      code: c,
-      name
-    }) => {
+    ({ code: c, name }) => {
+
       const r =
         rooms.get(
-          String(c || "")
-            .toUpperCase()
+          String(c || "").toUpperCase()
         );
 
       if (!r) {
@@ -1212,11 +1164,8 @@ io.on("connection", socket => {
 
       socket.join(r.code);
 
-      socket.data.room =
-        r.code;
-
-      socket.data.role =
-        "player";
+      socket.data.room = r.code;
+      socket.data.role = "player";
 
       socket.emit(
         "joined",
@@ -1230,26 +1179,27 @@ io.on("connection", socket => {
     }
   );
 
+
+  /* -------------------------------------------------------
+     참가자 답안 제출
+     ------------------------------------------------------- */
+
   socket.on(
     "answer",
     value => {
+
       const r =
-        rooms.get(
-          socket.data.room
-        );
+        rooms.get(socket.data.room);
 
       if (
         !r ||
-        socket.data.role !==
-          "player"
+        socket.data.role !== "player"
       ) {
         return;
       }
 
       const p =
-        r.participants.get(
-          socket.id
-        );
+        r.participants.get(socket.id);
 
       if (
         !p ||
@@ -1260,16 +1210,25 @@ io.on("connection", socket => {
       }
 
       const q =
-        r.questions[
-          r.current
-        ];
+        r.questions[r.current];
 
-      if (!q) return;
+      if (!q) {
+        return;
+      }
 
+      /*
+       * 참가자는 실제 보기 중 하나만 선택 가능.
+       *
+       * 따라서 진행자가
+       * "__NO_OPTION__|정답"
+       * 으로 설정하면
+       * 참가자가 고를 수 있는 보기와
+       * 실제 정답이 일치하지 않기 때문에
+       * 전부 오답이 됩니다.
+       */
       if (
         q.options.some(
-          o =>
-            o.value === value
+          o => o.value === value
         )
       ) {
         p.answer = value;
@@ -1279,9 +1238,15 @@ io.on("connection", socket => {
     }
   );
 
+
+  /* -------------------------------------------------------
+     연결 종료
+     ------------------------------------------------------- */
+
   socket.on(
     "disconnect",
     () => {
+
       hostSessions.delete(
         socket.id
       );
@@ -1289,23 +1254,29 @@ io.on("connection", socket => {
       const c =
         socket.data.room;
 
-      if (!c) return;
+      if (!c) {
+        return;
+      }
 
       const r =
         rooms.get(c);
 
-      if (!r) return;
+      if (!r) {
+        return;
+      }
 
       if (
-        socket.data.role ===
-        "player"
+        socket.data.role === "player"
       ) {
+
         r.participants.delete(
           socket.id
         );
+
       } else if (
         r.host === socket.id
       ) {
+
         r.host = null;
       }
 
@@ -1314,21 +1285,27 @@ io.on("connection", socket => {
   );
 });
 
+
+/* =========================================================
+   서버 시작
+   ========================================================= */
+
 const PORT =
   process.env.PORT || 3000;
 
 initDb()
-  .then(() =>
+  .then(() => {
     server.listen(
       PORT,
       "0.0.0.0",
-      () =>
+      () => {
         console.log(
           "QuizShow running on 0.0.0.0:" +
           PORT
-        )
-    )
-  )
+        );
+      }
+    );
+  })
   .catch(e => {
     console.error(
       "DB 초기화 실패",
