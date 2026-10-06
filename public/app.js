@@ -65,20 +65,53 @@ function makeOptions(type) {
 }
 
 /* =========================
-   보기 없음 정답 처리
+   정답 종류 판별
 ========================= */
 
+// 보기 없음
 function isNoOptionAnswer(answer) {
   return String(answer || "").startsWith("__NO_OPTION__|");
 }
 
-function getNoOptionCorrectAnswer(answer) {
-  if (!isNoOptionAnswer(answer)) return "";
-  return String(answer).slice("__NO_OPTION__|".length);
+// 모든 보기 정답
+function isAllOptionsAnswer(answer) {
+  return String(answer || "") === "__ALL_OPTIONS__";
 }
 
+// 참가자의 답이 정답인지 판별
+function isAnswerCorrect(q, answer) {
+  if (!q || !answer) return false;
+
+  // 모든 보기가 정답인 경우
+  if (isAllOptionsAnswer(q.answer)) {
+    return true;
+  }
+
+  // 보기 없음은 어떤 보기든 오답
+  if (isNoOptionAnswer(q.answer)) {
+    return false;
+  }
+
+  // 일반 정답
+  return answer === q.answer;
+}
+
+// 보기 없음의 실제 정답 가져오기
+function getNoOptionCorrectAnswer(answer) {
+  if (!isNoOptionAnswer(answer)) return "";
+
+  return String(answer).slice(
+    "__NO_OPTION__|".length
+  );
+}
+
+// 정답 공개 화면에 표시할 정답
 function getDisplayAnswer(q) {
   if (!q) return "";
+
+  if (isAllOptionsAnswer(q.answer)) {
+    return "모든 보기";
+  }
 
   if (isNoOptionAnswer(q.answer)) {
     return getNoOptionCorrectAnswer(q.answer);
@@ -161,13 +194,18 @@ socket.on("host:status", ({ configured }) => {
 });
 
 function loginHost() {
-  const pw = document.getElementById("pw")?.value || "";
+  const pw =
+    document.getElementById("pw")?.value || "";
+
   socket.emit("host:login", pw);
 }
 
 function setupHost() {
-  const a = document.getElementById("pw")?.value || "";
-  const b = document.getElementById("pw2")?.value || "";
+  const a =
+    document.getElementById("pw")?.value || "";
+
+  const b =
+    document.getElementById("pw2")?.value || "";
 
   if (a !== b) {
     return alert("비밀번호가 서로 다릅니다.");
@@ -202,8 +240,11 @@ socket.on("host:createPasswordResult", r => {
     "이 비밀번호로 로그인하면 기존 퀴즈와 완전히 분리된 새 퀴즈를 만들 수 있습니다."
   );
 
-  const a = document.getElementById("newHostPw");
-  const b = document.getElementById("newHostPw2");
+  const a =
+    document.getElementById("newHostPw");
+
+  const b =
+    document.getElementById("newHostPw2");
 
   if (a) a.value = "";
   if (b) b.value = "";
@@ -226,19 +267,25 @@ socket.on("host:quiz", quiz => {
   hostQuestions =
     quiz.questions?.length
       ? quiz.questions
-      : JSON.parse(JSON.stringify(sample));
+      : JSON.parse(
+          JSON.stringify(sample)
+        );
 
   hostSetup();
 });
 
 socket.on("host:saved", () => {
-  const b = document.getElementById("saveState");
+  const b =
+    document.getElementById("saveState");
 
   if (b) {
     b.textContent = "저장됨 ✓";
 
     setTimeout(() => {
-      if (b) b.textContent = "DB에 자동 저장";
+      if (b) {
+        b.textContent =
+          "DB에 자동 저장";
+      }
     }, 1200);
   }
 });
@@ -352,14 +399,16 @@ function hostSetup() {
 }
 
 function renderEditor() {
-  const ed = document.getElementById("editor");
+  const ed =
+    document.getElementById("editor");
 
   if (!ed) return;
 
   ed.innerHTML = "";
 
   hostQuestions.forEach((q, i) => {
-    const d = document.createElement("div");
+    const d =
+      document.createElement("div");
 
     d.className = "qrow";
 
@@ -385,26 +434,34 @@ function renderEditor() {
           <label>유형</label>
 
           <select data-k="type">
+
             <option
               value="single"
-              ${q.type === "single" ? "selected" : ""}
+              ${q.type === "single"
+                ? "selected"
+                : ""}
             >
               1,2,3,4
             </option>
 
             <option
               value="ox"
-              ${q.type === "ox" ? "selected" : ""}
+              ${q.type === "ox"
+                ? "selected"
+                : ""}
             >
               O / X
             </option>
 
             <option
               value="ab"
-              ${q.type === "ab" ? "selected" : ""}
+              ${q.type === "ab"
+                ? "selected"
+                : ""}
             >
               A / B
             </option>
+
           </select>
         </div>
 
@@ -448,17 +505,31 @@ function renderEditor() {
             o => `
               <option
                 value="${esc(o.value)}"
-                ${q.answer === o.value ? "selected" : ""}
+                ${q.answer === o.value
+                  ? "selected"
+                  : ""}
               >
-                ${esc(o.value)} · ${esc(o.label)}
+                ${esc(o.value)} ·
+                ${esc(o.label)}
               </option>
             `
           )
           .join("")}
 
         <option
+          value="__ALL_OPTIONS__"
+          ${isAllOptionsAnswer(q.answer)
+            ? "selected"
+            : ""}
+        >
+          모든 보기 정답
+        </option>
+
+        <option
           value="__NO_OPTION__"
-          ${isNoOptionAnswer(q.answer) ? "selected" : ""}
+          ${isNoOptionAnswer(q.answer)
+            ? "selected"
+            : ""}
         >
           보기 없음
         </option>
@@ -467,30 +538,49 @@ function renderEditor() {
 
       <div
         class="no-option-answer"
-        style="${isNoOptionAnswer(q.answer) ? "display:block;" : "display:none;"} margin-top:8px;"
+        style="${
+          isNoOptionAnswer(q.answer)
+            ? "display:block;"
+            : "display:none;"
+        } margin-top:8px;"
       >
+
         <label>실제 정답</label>
 
         <input
           data-k="noOptionAnswer"
-          value="${esc(getNoOptionCorrectAnswer(q.answer))}"
+          value="${esc(
+            getNoOptionCorrectAnswer(
+              q.answer
+            )
+          )}"
           placeholder="보기에는 없는 실제 정답을 입력하세요"
         >
 
-        <p class="muted" style="margin-top:6px;">
-          참가자는 보기 중 하나를 선택하지만, 어떤 보기를 선택해도 오답 처리됩니다.
+        <p
+          class="muted"
+          style="margin-top:6px;"
+        >
+          참가자는 보기 중 하나를 선택하지만,
+          어떤 보기를 선택해도 오답 처리됩니다.
         </p>
+
       </div>
     `;
 
     const typeSelect =
-      d.querySelector('[data-k="type"]');
+      d.querySelector(
+        '[data-k="type"]'
+      );
 
     if (typeSelect) {
       typeSelect.onchange = () => {
         q.type = typeSelect.value;
-        q.options = makeOptions(q.type);
-        q.answer = q.options[0].value;
+        q.options =
+          makeOptions(q.type);
+
+        q.answer =
+          q.options[0].value;
 
         renderEditor();
         saveQuiz();
@@ -503,21 +593,44 @@ function renderEditor() {
       )
       .forEach(x => {
         x.onchange = () => {
-          if (x.dataset.k === "answer") {
-            if (x.value === "__NO_OPTION__") {
-              const actual =
-                getNoOptionCorrectAnswer(q.answer);
 
+          if (x.dataset.k === "answer") {
+
+            // 모든 보기 정답
+            if (
+              x.value ===
+              "__ALL_OPTIONS__"
+            ) {
               q.answer =
-                "__NO_OPTION__|" + actual;
+                "__ALL_OPTIONS__";
 
               renderEditor();
               saveQuiz();
-
               return;
             }
 
-            q.answer = x.value;
+            // 보기 없음
+            if (
+              x.value ===
+              "__NO_OPTION__"
+            ) {
+              const actual =
+                getNoOptionCorrectAnswer(
+                  q.answer
+                );
+
+              q.answer =
+                "__NO_OPTION__|" +
+                actual;
+
+              renderEditor();
+              saveQuiz();
+              return;
+            }
+
+            // 일반 정답
+            q.answer =
+              x.value;
 
             saveQuiz();
             renderEditor();
@@ -526,20 +639,6 @@ function renderEditor() {
           }
 
           updateQ(q, d);
-        };
-      });
-
-    d
-      .querySelectorAll("[data-opt]")
-      .forEach(x => {
-        x.oninput = () => {
-          const index =
-            Number(x.dataset.opt);
-
-          if (q.options[index]) {
-            q.options[index].label = x.value;
-            saveQuiz();
-          }
         };
       });
 
@@ -557,6 +656,24 @@ function renderEditor() {
         saveQuiz();
       };
     }
+
+    d
+      .querySelectorAll(
+        "[data-opt]"
+      )
+      .forEach(x => {
+        x.oninput = () => {
+          const index =
+            Number(x.dataset.opt);
+
+          if (q.options[index]) {
+            q.options[index].label =
+              x.value;
+
+            saveQuiz();
+          }
+        };
+      });
 
     ed.appendChild(d);
   });
@@ -581,7 +698,15 @@ function updateQ(q, d) {
     );
 
   if (answerSelect) {
+
     if (
+      answerSelect.value ===
+      "__ALL_OPTIONS__"
+    ) {
+      q.answer =
+        "__ALL_OPTIONS__";
+
+    } else if (
       answerSelect.value ===
       "__NO_OPTION__"
     ) {
@@ -594,7 +719,9 @@ function updateQ(q, d) {
         );
 
       q.answer =
-        "__NO_OPTION__|" + actual;
+        "__NO_OPTION__|" +
+        actual;
+
     } else {
       q.answer =
         answerSelect.value;
@@ -606,14 +733,17 @@ function updateQ(q, d) {
 
 function saveQuiz() {
   hostTitle =
-    document.getElementById("title")?.value ||
+    document.getElementById(
+      "title"
+    )?.value ||
     hostTitle;
 
   socket.emit(
     "host:saveQuiz",
     {
       title: hostTitle,
-      questions: hostQuestions
+      questions:
+        hostQuestions
     }
   );
 }
@@ -627,11 +757,20 @@ function delQ(i) {
 
 function addQ() {
   hostQuestions.push({
-    id: "q" + Date.now(),
+    id:
+      "q" +
+      Date.now(),
+
     type: "single",
-    question: "새 문제",
-    options: makeOptions("single"),
+
+    question:
+      "새 문제",
+
+    options:
+      makeOptions("single"),
+
     answer: "1",
+
     points: 10
   });
 
@@ -650,17 +789,20 @@ function createRoom() {
     "host:create",
     {
       title: hostTitle,
-      questions: hostQuestions
+      questions:
+        hostQuestions
     }
   );
 }
 
-socket.on("host:created", ({ code }) => {
-  loadedRoomCode = code;
-  role = "host";
-
-  hostPage(code);
-});
+socket.on(
+  "host:created",
+  ({ code }) => {
+    loadedRoomCode = code;
+    role = "host";
+    hostPage(code);
+  }
+);
 
 /* =========================
    LOAD EXISTING ROOM
@@ -724,11 +866,18 @@ function loadExistingRoom() {
   );
 }
 
-socket.on("host:ok", () => {
-  if (loadedRoomCode) {
-    hostPage(loadedRoomCode);
+socket.on(
+  "host:ok",
+  ({ code }) => {
+    loadedRoomCode =
+      code ||
+      loadedRoomCode;
+
+    hostPage(
+      loadedRoomCode
+    );
   }
-});
+);
 
 /* =========================
    ROOM STATE
@@ -739,10 +888,12 @@ let lastQuestionIndex = null;
 socket.on("state", s => {
   const changedQuestion =
     lastQuestionIndex !== null &&
-    lastQuestionIndex !== s.current;
+    lastQuestionIndex !==
+      s.current;
 
   state = s;
-  lastQuestionIndex = s.current;
+  lastQuestionIndex =
+    s.current;
 
   if (changedQuestion) {
     myAnswer = null;
@@ -818,7 +969,9 @@ function renderHost() {
   }
 
   const q =
-    state.questions[state.current];
+    state.questions[
+      state.current
+    ];
 
   if (!q) {
     main.innerHTML = `
@@ -838,7 +991,9 @@ function renderHost() {
 
     <p>
       문제 점수:
-      <b>${Number(q.points) || 0}</b>점
+      <b>
+        ${Number(q.points) || 0}
+      </b>점
       · 상태:
       ${
         state.revealed
@@ -856,7 +1011,9 @@ function renderHost() {
           o => `
             <div class="card">
               <b>${esc(o.value)}</b>
-              <span>${esc(o.label)}</span>
+              <span>
+                ${esc(o.label)}
+              </span>
             </div>
           `
         )
@@ -869,7 +1026,11 @@ function renderHost() {
       <button
         class="primary"
         onclick="prevQuestion()"
-        ${state.current <= 0 ? "disabled" : ""}
+        ${
+          state.current <= 0
+            ? "disabled"
+            : ""
+        }
       >
         이전 문제
       </button>
@@ -910,7 +1071,11 @@ function renderHost() {
       <button
         class="green"
         onclick="revealAnswer()"
-        ${state.revealed ? "disabled" : ""}
+        ${
+          state.revealed
+            ? "disabled"
+            : ""
+        }
       >
         정답 공개
       </button>
@@ -943,8 +1108,12 @@ function renderPlayers() {
   if (!el) return;
 
   const players =
-    Array.isArray(state?.participants)
-      ? [...state.participants]
+    Array.isArray(
+      state?.participants
+    )
+      ? [
+          ...state.participants
+        ]
       : [];
 
   if (!players.length) {
@@ -963,44 +1132,61 @@ function renderPlayers() {
       (Number(a.score) || 0)
   );
 
-  el.innerHTML = players
-    .map(
-      p => `
-        <div class="card">
-          <b>${esc(p.name)}</b>
+  el.innerHTML =
+    players
+      .map(
+        p => `
+          <div class="card">
+            <b>
+              ${esc(p.name)}
+            </b>
 
-          <span>
-            ${Number(p.score) || 0}점
-            ${
-              p.answer
-                ? ` · 답변: ${esc(p.answer)}`
-                : ""
-            }
-          </span>
-        </div>
-      `
-    )
-    .join("");
+            <span>
+              ${Number(p.score) || 0}점
+
+              ${
+                p.answer
+                  ? `
+                    · 답변:
+                    ${esc(p.answer)}
+                  `
+                  : ""
+              }
+            </span>
+          </div>
+        `
+      )
+      .join("");
 }
 
 function nextQuestion() {
-  socket.emit("host:next");
+  socket.emit(
+    "host:next"
+  );
 }
 
 function prevQuestion() {
-  socket.emit("host:prev");
+  socket.emit(
+    "host:prev"
+  );
 }
 
 function lockQuestion() {
-  socket.emit("host:lock");
+  socket.emit(
+    "host:lock"
+  );
 }
 
 function unlockQuestion() {
-  socket.emit("host:unlock");
+  socket.emit(
+    "host:unlock"
+  );
 }
 
 function revealAnswer() {
-  socket.emit("host:reveal");
+  socket.emit(
+    "host:reveal"
+  );
 }
 
 function resetScores() {
@@ -1093,28 +1279,36 @@ function joinRoom() {
   );
 }
 
-socket.on("joined", ({ code, name }) => {
-  role = "player";
-  myName = name || myName;
-  loadedRoomCode = code;
-  myAnswer = null;
+socket.on(
+  "joined",
+  ({ code, name }) => {
+    role = "player";
+    myName =
+      name || myName;
 
-  app.innerHTML = `
-    <div class="wrap">
-      <div class="card">
-        <p class="muted">
-          방에 참가했습니다. 퀴즈가 시작되면 문제가 표시됩니다.
-        </p>
+    loadedRoomCode = code;
+    myAnswer = null;
+
+    app.innerHTML = `
+      <div class="wrap">
+        <div class="card">
+          <p class="muted">
+            방에 참가했습니다.
+            퀴즈가 시작되면 문제가 표시됩니다.
+          </p>
+        </div>
       </div>
-    </div>
-  `;
-});
+    `;
+  }
+);
 
 function renderPlayer() {
   if (!state) return;
 
   const q =
-    state.questions[state.current];
+    state.questions[
+      state.current
+    ];
 
   if (!q) {
     app.innerHTML = `
@@ -1133,9 +1327,13 @@ function renderPlayer() {
   }
 
   const me =
-    Array.isArray(state.participants)
+    Array.isArray(
+      state.participants
+    )
       ? state.participants.find(
-          p => p.id === socket.id
+          p =>
+            p.id ===
+            socket.id
         )
       : null;
 
@@ -1146,7 +1344,8 @@ function renderPlayer() {
     me?.answer || null;
 
   if (serverAnswer) {
-    myAnswer = serverAnswer;
+    myAnswer =
+      serverAnswer;
   }
 
   app.innerHTML = `
@@ -1157,6 +1356,7 @@ function renderPlayer() {
         <div class="top">
 
           <div>
+
             <h1>
               ${esc(
                 state.title ||
@@ -1167,6 +1367,7 @@ function renderPlayer() {
             <span class="badge">
               ${esc(myName)}
             </span>
+
           </div>
 
           <span class="badge">
@@ -1194,11 +1395,18 @@ function renderPlayer() {
                 </p>
 
                 ${
-                  myAnswer === q.answer
+                  isAnswerCorrect(
+                    q,
+                    myAnswer
+                  )
                     ? `
                       <p>
                         정답입니다!
-                        +${Number(q.points) || 0}점
+                        +${
+                          Number(
+                            q.points
+                          ) || 0
+                        }점
                       </p>
                     `
                     : myAnswer
@@ -1223,7 +1431,9 @@ function renderPlayer() {
                     ? `
                       <p>
                         제출한 답:
-                        <b>${esc(myAnswer)}</b>
+                        <b>
+                          ${esc(myAnswer)}
+                        </b>
                       </p>
                     `
                     : ""
@@ -1237,15 +1447,24 @@ function renderPlayer() {
                       o => `
                         <button
                           class="option"
-                          onclick="answerQuestion('${esc(o.value)}')"
+                          onclick="answerQuestion('${esc(
+                            o.value
+                          )}')"
                           ${
                             myAnswer
                               ? "disabled"
                               : ""
                           }
                         >
-                          <b>${esc(o.value)}</b>
-                          ${esc(o.label)}
+                          <b>
+                            ${esc(
+                              o.value
+                            )}
+                          </b>
+
+                          ${esc(
+                            o.label
+                          )}
                         </button>
                       `
                     )
@@ -1258,7 +1477,11 @@ function renderPlayer() {
                     ? `
                       <p class="muted">
                         제출한 답:
-                        <b>${esc(myAnswer)}</b>
+                        <b>
+                          ${esc(
+                            myAnswer
+                          )}
+                        </b>
                       </p>
                     `
                     : ""
@@ -1283,25 +1506,23 @@ function answerQuestion(answer) {
   }
 
   const q =
-    state?.questions?.[state.current];
+    state?.questions?.[
+      state.current
+    ];
 
   if (!q) return;
 
   if (
     !q.options.some(
-      o => o.value === answer
+      o =>
+        o.value ===
+        answer
     )
   ) {
     return;
   }
 
   myAnswer = answer;
-
-  /*
-    server.js는 answer 이벤트에서
-    값을 직접 받으므로 객체가 아니라
-    answer 문자열을 보낸다.
-  */
 
   socket.emit(
     "answer",
@@ -1333,7 +1554,9 @@ function boot() {
     <div class="wrap">
       <div class="card auth">
 
-        <h1>우리들의 퀴즈쇼</h1>
+        <h1>
+          우리들의 퀴즈쇼
+        </h1>
 
         <p class="muted">
           진행자는 /host,
